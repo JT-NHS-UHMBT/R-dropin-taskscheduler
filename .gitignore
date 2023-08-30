@@ -1,0 +1,5 @@
+/email_body_files
+*.Rproj*
+*.log
+*.html
+*.png
