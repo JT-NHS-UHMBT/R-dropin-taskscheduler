@@ -1,7 +1,12 @@
 library(NHSRdatasets)
 library(dplyr)
 library(ggplot2)
-library(sendmailR)
+library(RDCOMClient)
+
+
+# Load environment variables
+PLOT_PATH <- Sys.getenv("PLOT_PATH")
+RECEIVER_EMAIL <- Sys.getenv("RECEIVER_EMAIL")
 
 # Loading NHS-R A&E attendances dataset
 ae_attendances <- NHSRdatasets::ae_attendances
@@ -42,47 +47,58 @@ ae_plot <- ggplot2::ggplot(ae_attendances_R, aes(x = period)) +
   )
 
 # Save plot
-ggplot2::ggsave('ae_plot.png', plot = ae_plot, width = 8, height = 6)
+ggplot2::ggsave(PLOT_PATH, plot = ae_plot, width = 8, height = 6)
   
 
 
 # Specify email properties
 subject <- paste("A&E metrics - ", format(Sys.time(), "%e %b %Y"))
-sender <- c("DataSci_Bot@mbhci.nhs.uk")
-receiver_emails <- c("Jake.Tufts@mbhci.nhs.uk")
+receiver_emails <- c(RECEIVER_EMAIL)
 
 # Attach image of accuracy over time
-images_path <- ('ae_plot.png')
-images_inline <- sendmailR::mime_part(x=images_path, name='ae_plot.png')
+image_path <- (PLOT_PATH)
 
+
+### Sending the email
+# devtools::install_github("omegahat/RDCOMClient")
+
+# init com api
+OutApp <- COMCreate("Outlook.Application")
+
+# create an email 
+outMail = OutApp$CreateItem(0)
+
+# configure  email parameter 
+outMail[["To"]] = receiver_emails
+outMail[["subject"]] = "Test"
+
+# Add attachment
+outMail[["attachments"]]$Add(image_path) 
+
+# Refer to the attachment with a cid - "basename" returns the file name without the directory.
+image_inline <- paste0( "<img src='cid:",
+                             basename(image_path),
+                             "' width = '400' height = '400'>")
 
 # Write email content
-string_msg <- ('
+msg <- paste0('
 <html>
 <body>
 <p>Data Scientists,</p>
-<p>The current outlook of the NHS-R A&E attendances are:</p>
-<img src="ae_plot.png" style=\"width:50.0%\">
-<p>Best regards,</p>
+<p>The current outlook of the NHS-R A&E attendances are:</p>',
+image_inline,
+'<p>Best regards,</p>
 <p>Data Sci bot.</p>
 </body>
 </html>'
 )
 
+# Put the text and plot together in the body of the email.
+outMail[["HTMLBody"]] <- msg
 
-# Create an inline HTML MIME Part
-msg <- sendmailR::mime_part_html(string_msg)
+# send it                     
+outMail$Send()
 
-# Add images as attachment
-body <- list(msg, images_inline)
 
-# Email details
-smtp_server <- "edgemail.uhmb.nhs.uk"
-smtp_port <- 25
-
-# Send email
-sendmailR::sendmail(from = sender,
-         to = receiver_emails,
-         subject = subject,
-         msg = body,
-         control = list(smtpServer = smtp_server, port = smtp_port))
+# For task log
+print(paste0('Task completed succesfully! At time:', Sys.time()))
